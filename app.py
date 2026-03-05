@@ -3,20 +3,22 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Dashboard ESG Intégré", layout="wide")
 
 @st.cache_data
 def load_all_data():
-    # Chargement avec les noms de fichiers exacts de ton GitHub
+    # Chargement des fichiers (Chemins relatifs pour GitHub/Cloud)
     df_temp = pd.read_csv("changements_climatiques.csv")
     df_co2 = pd.read_csv("emission_deC02_annuel_par pays.csv")
     df_gender = pd.read_csv("ecart_salariales_hommes_vs_femmes.csv")
     df_ceo = pd.read_csv("ceo_salaires_vs_employés.csv")
     df_sea = pd.read_csv("hausse_du_niveau_desmers_par an.csv", sep=';')
     
-    # Nettoyages spécifiques (issus de tes codes 1 à 5)
+    # Nettoyage Température
     df_temp = df_temp.rename(columns={"Change in global mean surface temperature caused by greenhouse gas emissions": "temp_change"})
+    
+    # Nettoyage CO2
     df_co2 = df_co2.rename(columns={"Annual CO₂ emissions": "co2"})
     
     # Nettoyage Gender Pay Gap
@@ -46,37 +48,53 @@ menu = st.sidebar.radio("Navigation", ["🌡️ Climat (Temp & CO2)", "🌊 Nive
 
 # --- 1. CLIMAT (TEMP & CO2) ---
 if menu == "🌡️ Climat (Temp & CO2)":
-    st.title("Analyse Environnementale : Température & CO2")
+    st.title("Analyse Environnementale : Top Pollueurs & Évolutions")
     
-    pays = st.selectbox("Sélectionner un Pays", sorted(df_temp['Entity'].unique()))
+    # --- TOP 40 DES PAYS ÉMETTEURS ---
+    st.subheader("📊 Classement : Les 40 plus gros émetteurs de CO2")
+    year_col = 'year' if 'year' in df_co2.columns else 'Year'
+    latest_year = df_co2[year_col].max()
+    
+    # Filtrage pour exclure les régions globales si nécessaire et prendre le top 40
+    df_latest = df_co2[df_co2[year_col] == latest_year].sort_values("co2", ascending=False).head(40)
+    
+    fig_top40 = px.bar(df_latest, x="co2", y="Entity" if "Entity" in df_latest.columns else "country", 
+                       orientation='h', 
+                       title=f"Émissions annuelles en {latest_year} (Top 40)",
+                       labels={"co2": "Émissions de CO2", "Entity": "Pays/Région"},
+                       color="co2", color_continuous_scale="Reds")
+    fig_top40.update_layout(yaxis={'categoryorder':'total ascending'}, height=800)
+    st.plotly_chart(fig_top40, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- FOCUS PAR PAYS ---
+    st.subheader("🔍 Analyse détaillée par pays")
+    pays = st.selectbox("Sélectionner un Pays pour voir son historique", sorted(df_temp['Entity'].unique()))
     
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.subheader(f"Température : {pays}")
+        st.write(f"**Température : {pays}**")
         d_t = df_temp[df_temp['Entity'] == pays].sort_values("Year")
-        # Calcul des KPIs (ton code n°1)
         if not d_t.empty:
             var_totale = d_t.iloc[-1]['temp_change'] - d_t.iloc[0]['temp_change']
             st.metric("Variation Totale", f"{var_totale:.2f} °C")
-            fig_t = px.line(d_t, x="Year", y="temp_change", template="plotly_white")
+            fig_t = px.line(d_t, x="Year", y="temp_change", template="plotly_dark")
             st.plotly_chart(fig_t, use_container_width=True)
         
     with col2:
-        st.subheader(f"Émissions CO2 : {pays}")
-        # Gestion du nom de colonne 'country' ou 'Entity'
+        st.write(f"**Émissions CO2 : {pays}**")
         c_col = 'Entity' if 'Entity' in df_co2.columns else 'country'
-        d_c = df_co2[df_co2[c_col] == pays].sort_values("year" if "year" in df_co2.columns else "Year")
+        d_c = df_co2[df_co2[c_col] == pays].sort_values(year_col)
         if not d_c.empty:
-            y_col = "year" if "year" in d_c.columns else "Year"
-            fig_c = px.line(d_c, x=y_col, y="co2", markers=True)
+            fig_c = px.line(d_c, x=year_col, y="co2", markers=True)
             st.plotly_chart(fig_c, use_container_width=True)
 
 # --- 2. NIVEAU DES MERS ---
 elif menu == "🌊 Niveau des Mers":
     st.title("Risque Physique : Élévation des océans")
     hausse_totale = df_sea[col_sea].iloc[-1] - df_sea[col_sea].iloc[0]
-    st.metric("Élévation Totale (1880-2020)", f"{hausse_totale:.1f} mm", delta="Accélération")
+    st.metric("Élévation Totale (1880-2020)", f"{hausse_totale:.1f} mm")
     fig_sea = px.area(df_sea, x='Day', y=col_sea, color_discrete_sequence=['#0077be'])
     st.plotly_chart(fig_sea, use_container_width=True)
 
