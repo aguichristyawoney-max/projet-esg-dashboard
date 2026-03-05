@@ -8,33 +8,28 @@ st.set_page_config(page_title="Dashboard ESG Intégré", layout="wide")
 
 @st.cache_data
 def load_all_data():
-    # Chargement des fichiers (Chemins relatifs pour GitHub/Cloud)
+    # Chargement des fichiers
     df_temp = pd.read_csv("changements_climatiques.csv")
     df_co2 = pd.read_csv("emission_deC02_annuel_par pays.csv")
     df_gender = pd.read_csv("ecart_salariales_hommes_vs_femmes.csv")
     df_ceo = pd.read_csv("ceo_salaires_vs_employés.csv")
     df_sea = pd.read_csv("hausse_du_niveau_desmers_par an.csv", sep=';')
     
-    # Nettoyage Température
+    # Nettoyage
     df_temp = df_temp.rename(columns={"Change in global mean surface temperature caused by greenhouse gas emissions": "temp_change"})
-    
-    # Nettoyage CO2
     df_co2 = df_co2.rename(columns={"Annual CO₂ emissions": "co2"})
     
-    # Nettoyage Gender Pay Gap
     try:
         df_gender = df_gender[['Zone de référence', 'Opération d\'agrégation', 'TIME_PERIOD', 'OBS_VALUE']]
     except:
         df_gender = df_gender.iloc[:, [0, 1, 4, 5]]
     df_gender.columns = ['Pays', 'Methode', 'Annee', 'Ecart']
     
-    # Nettoyage CEO
     def clean_val(x): return float(str(x).replace('$', '').replace(',', '').strip())
     df_ceo['salary'] = df_ceo['salary'].apply(clean_val)
     df_ceo['pay_ratio_num'] = df_ceo['pay_ratio'].apply(lambda x: float(str(x).split(':')[0].replace(',', '')))
     df_ceo['industry'] = df_ceo['industry'].str.replace('%20', ' ')
     
-    # Nettoyage Mer
     df_sea['Day'] = pd.to_datetime(df_sea['Day'], format='mixed', dayfirst=True)
     col_sea = "Average of Church and White (2011) and UHSLC"
     
@@ -50,18 +45,21 @@ menu = st.sidebar.radio("Navigation", ["🌡️ Climat (Temp & CO2)", "🌊 Nive
 if menu == "🌡️ Climat (Temp & CO2)":
     st.title("Analyse Environnementale : Top Pollueurs & Évolutions")
     
-    # --- TOP 40 DES PAYS ÉMETTEURS ---
-    st.subheader("📊 Classement : Les 40 plus gros émetteurs de CO2")
+    # --- AJOUT DU CURSEUR PAR ANNÉE ---
     year_col = 'year' if 'year' in df_co2.columns else 'Year'
-    latest_year = df_co2[year_col].max()
+    min_year = int(df_co2[year_col].min())
+    max_year = int(df_co2[year_col].max())
     
-    # Filtrage pour exclure les régions globales si nécessaire et prendre le top 40
-    df_latest = df_co2[df_co2[year_col] == latest_year].sort_values("co2", ascending=False).head(40)
+    st.subheader("📊 Classement Historique des Émetteurs")
+    selected_year = st.slider("Sélectionner une année pour le Top 40", min_year, max_year, max_year)
     
-    fig_top40 = px.bar(df_latest, x="co2", y="Entity" if "Entity" in df_latest.columns else "country", 
+    # Filtrage par année sélectionnée
+    df_year = df_co2[df_co2[year_col] == selected_year].sort_values("co2", ascending=False).head(40)
+    
+    fig_top40 = px.bar(df_year, x="co2", y="Entity" if "Entity" in df_year.columns else "country", 
                        orientation='h', 
-                       title=f"Émissions annuelles en {latest_year} (Top 40)",
-                       labels={"co2": "Émissions de CO2", "Entity": "Pays/Région"},
+                       title=f"Top 40 des émetteurs de CO2 en {selected_year}",
+                       labels={"co2": "Émissions (tonnes)", "Entity": "Pays/Région"},
                        color="co2", color_continuous_scale="Reds")
     fig_top40.update_layout(yaxis={'categoryorder':'total ascending'}, height=800)
     st.plotly_chart(fig_top40, use_container_width=True)
@@ -69,8 +67,8 @@ if menu == "🌡️ Climat (Temp & CO2)":
     st.markdown("---")
 
     # --- FOCUS PAR PAYS ---
-    st.subheader("🔍 Analyse détaillée par pays")
-    pays = st.selectbox("Sélectionner un Pays pour voir son historique", sorted(df_temp['Entity'].unique()))
+    st.subheader("🔍 Analyse détaillée par pays (Historique complet)")
+    pays = st.selectbox("Sélectionner un Pays pour voir son graphique temporel", sorted(df_temp['Entity'].unique()))
     
     col1, col2 = st.columns(2)
     with col1:
@@ -79,7 +77,7 @@ if menu == "🌡️ Climat (Temp & CO2)":
         if not d_t.empty:
             var_totale = d_t.iloc[-1]['temp_change'] - d_t.iloc[0]['temp_change']
             st.metric("Variation Totale", f"{var_totale:.2f} °C")
-            fig_t = px.line(d_t, x="Year", y="temp_change", template="plotly_dark")
+            fig_t = px.line(d_t, x="Year", y="temp_change", template="plotly_white")
             st.plotly_chart(fig_t, use_container_width=True)
         
     with col2:
